@@ -9,6 +9,12 @@ class Sonnet:
 
         # ToDo 1: Make sure the sonnet has an attribute id that contains the number of the Sonnet as an int
         #self.id =
+        import re
+        match = re.search(r'Sonnet (\d+)', self.title)
+        if match:
+            self.id = int(match.group(1))
+        else:
+            self.id = hash(self.title)
 
     @staticmethod
     def find_spans(text: str, pattern: str):
@@ -68,7 +74,14 @@ class Index:
         for sonnet in sonnets:
             # ToDo 2: Implement logic of adding tokens to the index. Use the pre-defined methods tokenize and
             #  _add_token to do so. Index the title and the lines of the sonnet.
-            pass # Remove the pass keyword and replace it with your code
+            title_tokens = self.tokenize(sonnet.title)
+            for token, position in title_tokens:
+                self._add_token(sonnet.id, token, None, position)
+
+            for line_no, line_text in enumerate(sonnet.lines):
+                line_tokens = self.tokenize(line_text)
+                for token, position in line_tokens:
+                    self._add_token(sonnet.id, token, line_no, position)
 
     @staticmethod
     def tokenize(text):
@@ -189,8 +202,24 @@ class Index:
                     sonnet = self.sonnets[doc_id]
 
                     # ToDo 3: Based on the posting create the corresponding SearchResult instance
-                    result = None # Replace with code to create the correct SearchResult instance
+                    # Replace with code to create the correct SearchResult instance
+                    if posting.line_no is None:
+                        token_length = len(token)
+                        title_spans = [(posting.position, posting.position + token_length)]
+                        line_matches = []
+                    else:
+                        title_spans = []
+                        line_text = sonnet.lines[posting.line_no]
+                        token_length = len(token)
+                        spans = [(posting.position, posting.position + token_length)]
+                        line_matches = [LineMatch(posting.line_no + 1, line_text, spans)]
 
+                    result = SearchResult(
+                        title=sonnet.title,
+                        title_spans=title_spans,
+                        line_matches=line_matches,
+                        matches=1
+                    )
                     # At this point result contains the SearchResult corresponding to the posting - ready to be added
                     # to the results dictionary.
                     if doc_id not in results:
@@ -264,7 +293,21 @@ class Searcher:
             #         mode will always contains all search results.
 
             # Add your code here...
-
+            if not combined_results:
+                combined_results = results
+            else:
+                if search_mode == "AND":
+                    new_combined = {}
+                    for doc_id in combined_results:
+                        if doc_id in results:
+                            new_combined[doc_id] = combined_results[doc_id].combine_with(results[doc_id])
+                    combined_results = new_combined
+                elif search_mode == "OR":
+                    for doc_id, result in results.items():
+                        if doc_id in combined_results:
+                            combined_results[doc_id] = combined_results[doc_id].combine_with(result)
+                        else:
+                            combined_results[doc_id] = result
             # At this point combined_results contains a dictionary with the sonnet ID as key and the search result for
             # this sonnet. Just like the result you receive from the index, but combined for all words
 

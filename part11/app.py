@@ -12,6 +12,31 @@ from .models import SearchResult, Searcher
 
 from .file_utilities import load_config, load_sonnets, Configuration
 
+class SettingHandler:
+    def __init__(self, command_name: str, attribute_name: str, valid_values: tuple,
+                 parse_fn=None, display_fn=None):
+        self.command_name = command_name
+        self.attribute_name = attribute_name
+        self.valid_values = valid_values
+        self.parse_fn = parse_fn if parse_fn else lambda x: x
+        self.display_fn = display_fn if display_fn else str
+
+    def handle(self, raw_input: str, config: Configuration) -> bool:
+        if not raw_input.startswith(self.command_name):
+            return False
+
+        parts = raw_input.split()
+        if len(parts) == 2 and self.parse_fn(parts[1]) in self.valid_values:
+            setattr(config, self.attribute_name, self.parse_fn(parts[1]))
+            current_value = getattr(config, self.attribute_name)
+            print(f"{self.attribute_name.replace('_', ' ').title()} set to {self.display_fn(current_value)}")
+            config.save()
+        else:
+            values_str = "|".join(str(v).lower() if isinstance(v, bool) else str(v) for v in self.valid_values)
+            print(f"Usage: {self.command_name} {values_str}")
+
+        return True
+
 
 def print_results(
     query: str | None,
@@ -46,6 +71,28 @@ def main() -> None:
 
     searcher = Searcher(sonnets)
 
+    highlight_handler = SettingHandler(
+        command_name=":highlight",
+        attribute_name="highlight",
+        valid_values=(True, False),
+        parse_fn=lambda x: x.lower() == "on",
+        display_fn=lambda x: "ON" if x else "OFF"
+    )
+
+    search_mode_handler = SettingHandler(
+        command_name=":search-mode",
+        attribute_name="search_mode",
+        valid_values=("AND", "OR"),
+        parse_fn=str.upper
+    )
+
+    hl_mode_handler = SettingHandler(
+        command_name=":hl-mode",
+        attribute_name="hl_mode",
+        valid_values=("DEFAULT", "GREEN"),
+        parse_fn=str.upper
+    )
+
     while True:
         try:
             raw = input("> ").strip()
@@ -66,37 +113,16 @@ def main() -> None:
                 print(HELP)
                 continue
 
-            if raw.startswith(":highlight"):
-                parts = raw.split()
-                if len(parts) == 2 and parts[1].lower() in ("on", "off"):
-                    config.highlight = parts[1].lower() == "on"
-                    print("Highlighting", "ON" if config.highlight else "OFF")
-                    config.save()
-                else:
-                    print("Usage: :highlight on|off")
+            if highlight_handler.handle(raw, config):
+                continue
+            if search_mode_handler.handle(raw, config):
+                continue
+            if hl_mode_handler.handle(raw, config):
                 continue
 
-            if raw.startswith(":search-mode"):
-                parts = raw.split()
-                if len(parts) == 2 and parts[1].upper() in ("AND", "OR"):
-                    config.search_mode = parts[1].upper()
-                    print("Search mode set to", config.search_mode)
-                    config.save()
-                else:
-                    print("Usage: :search-mode AND|OR")
-                continue
-
-            if raw.startswith(":hl-mode"):
-                parts = raw.split()
-                if len(parts) == 2 and parts[1].upper() in ("DEFAULT", "GREEN"):
-                    config.hl_mode = parts[1].upper()
-                    print("Highlight mode set to", config.hl_mode)
-                    config.save()
-                else:
-                    print("Usage: :hl_mode DEFAULT|GREEN")
-                continue
-
+            print("Unknown command. Type :help for commands.")
             continue
+
 
         # ---------- Query evaluation ----------
 
